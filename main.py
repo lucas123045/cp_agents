@@ -8,6 +8,18 @@ Uso:
 """
 
 import asyncio
+import os
+import sys
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Garante saída em UTF-8 no console do Windows, evitando caracteres acentuados
+# corrompidos (cp1252/cp850 não cobrem todos os caracteres usados nas mensagens).
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdin.reconfigure(encoding="utf-8")
 
 from agents import Runner
 
@@ -16,6 +28,14 @@ from data import CONTA
 
 
 async def main() -> None:
+    if not os.environ.get("OPENAI_API_KEY"):
+        print(
+            "Erro: variável de ambiente OPENAI_API_KEY não encontrada.\n"
+            "Defina-a no arquivo .env (OPENAI_API_KEY=sua-chave-aqui) ou exporte-a "
+            "no terminal antes de rodar o programa."
+        )
+        sys.exit(1)
+
     print("=== Banco Fictício - Atendimento Inteligente (multiagente) ===")
     print(f"Titular: {CONTA['titular']} | Saldo inicial: R$ {CONTA['saldo']:.2f}")
     print("Contatos disponíveis para PIX: Ana, Bruno, Carla, Diego, Eduarda")
@@ -27,7 +47,12 @@ async def main() -> None:
     agente_atual = agente_atendimento
 
     while True:
-        entrada = input("Você: ").strip()
+        try:
+            entrada = input("Você: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAtendimento encerrado. Até logo!")
+            break
+
         if not entrada:
             continue
         if entrada.lower() in ("sair", "exit", "quit"):
@@ -36,7 +61,12 @@ async def main() -> None:
 
         historico.append({"role": "user", "content": entrada})
 
-        resultado = await Runner.run(agente_atual, historico)
+        try:
+            resultado = await Runner.run(agente_atual, historico)
+        except Exception as erro:
+            print(f"\n[Erro] Não foi possível processar sua mensagem: {erro}\n")
+            historico.pop()
+            continue
 
         print(f"\n[{resultado.last_agent.name}]: {resultado.final_output}\n")
 

@@ -16,7 +16,7 @@ Arquitetura:
             handoff (se o assunto mudar no meio da conversa)
 """
 
-from agents import Agent
+from agents import Agent, handoff
 
 from tools import (
     consultar_saldo,
@@ -25,6 +25,10 @@ from tools import (
     consultar_extrato,
     consultar_base_conhecimento,
 )
+
+# Modelo fixo para os 3 agentes: evita depender do modelo padrão do SDK
+# (que pode não estar disponível para todo projeto/chave de API).
+MODELO = "gpt-4o-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +62,7 @@ Outras solicitações:
 
 Seja sempre claro, objetivo e use valores em Reais (R$) formatados com duas casas decimais.
 """,
+    model=MODELO,
     tools=[consultar_saldo, buscar_destinatario, realizar_pix, consultar_extrato],
 )
 
@@ -80,6 +85,7 @@ saldo/extrato da conta, faça handoff para o Agente PIX em vez de tentar respond
 
 Seja didático, cordial e direto ao ponto.
 """,
+    model=MODELO,
     tools=[consultar_base_conhecimento],
 )
 
@@ -104,10 +110,22 @@ sem tentar resolver a solicitação você mesmo. Se a mensagem for ambígua (ex:
 "preciso de ajuda"), cumprimente o cliente brevemente e pergunte o que ele deseja fazer,
 antes de encaminhar.
 """,
-    handoffs=[agente_pix, agente_duvidas],
+    model=MODELO,
+    handoffs=[
+        handoff(agente_pix, tool_name_override="transfer_to_pix"),
+        handoff(agente_duvidas, tool_name_override="transfer_to_duvidas"),
+    ],
 )
 
 # Handoffs de volta: permitem que o Agente PIX e o Agente de Dúvidas se redirecionem
 # mutuamente (ou de volta à triagem) caso o assunto do cliente mude no meio da conversa.
-agente_pix.handoffs = [agente_atendimento, agente_duvidas]
-agente_duvidas.handoffs = [agente_atendimento, agente_pix]
+# `tool_name_override` evita nomes de tool com acentos/espaços (derivados do
+# nome de exibição do agente), que o SDK teria que sanitizar automaticamente.
+agente_pix.handoffs = [
+    handoff(agente_atendimento, tool_name_override="transfer_to_atendimento"),
+    handoff(agente_duvidas, tool_name_override="transfer_to_duvidas"),
+]
+agente_duvidas.handoffs = [
+    handoff(agente_atendimento, tool_name_override="transfer_to_atendimento"),
+    handoff(agente_pix, tool_name_override="transfer_to_pix"),
+]
